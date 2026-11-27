@@ -26,4 +26,30 @@ Diseñé la vista de cada álbum alrededor de su portada. Debajo quedan la descr
 
 ## Cómo lo construí
 
-Elegí el papel marfil, el color vino y la tipografía editorial para acercar la interfaz a un álbum de fotos. Construí la interfaz adaptable con **React y TypeScript** y la API con **FastAPI**. Uso **PostgreSQL** para las cuentas y los datos del álbum, y un almacenamiento privado para las fotos y los vídeos. El acceso a los archivos se comprueba en el servidor según la cuenta y su pertenencia al espacio compartido.
+Elegí el papel marfil, el color vino y la tipografía editorial para acercar la interfaz a un álbum de fotos. Por dentro, separé la interfaz, las reglas del álbum y el almacenamiento de archivos. Así puedo recorrer la galería por páginas y cargar miniaturas sin descargar los originales.
+
+### Stack
+
+| Parte | Tecnologías | Qué construí |
+| --- | --- | --- |
+| Interfaz web | **React, TypeScript, Vite y TanStack Query** | Una interfaz adaptable a escritorio y móvil, preparada como PWA. Uso TanStack Query para gestionar las peticiones y cargar la cronología por páginas según los filtros activos. |
+| API | **Python y FastAPI** | Implementé los flujos de sesión, invitación, subida y organización del álbum. Separé los casos de uso de las rutas HTTP y de los adaptadores de persistencia. |
+| Datos | **PostgreSQL, SQLAlchemy y Alembic** | Guardo las cuentas, la pertenencia al espacio compartido, las fechas y notas de los recuerdos, los álbumes y los favoritos. Versiono el esquema con migraciones. |
+| Archivos | **SeaweedFS, Pillow y FFmpeg** | Guardo los originales y sus variantes en un almacén privado compatible con S3. Genero miniaturas y vistas previas WebP con Pillow y extraigo un fotograma con FFmpeg para representar cada vídeo en la galería. |
+| Infraestructura | **Caddy y Docker Compose** | Defino los servicios con Compose. Caddy sirve la interfaz y dirige las solicitudes a la API o al almacén de archivos según corresponda. |
+
+### Arquitectura
+
+```mermaid
+flowchart TD
+    browser["Navegador / PWA"] -->|"HTTPS"| gateway["Entrada privada"]
+    gateway --> web["Caddy"]
+    web -->|"Peticiones a la API"| api["FastAPI"]
+    api -->|"Cuentas y metadatos"| db[("PostgreSQL")]
+    api -->|"Originales y vistas previas"| media[("SeaweedFS / S3")]
+    web -->|"Lectura con enlace temporal"| media
+```
+
+**Cuando subo un recuerdo**, la API comprueba mi sesión y mi pertenencia al espacio compartido. Valida el archivo, genera sus variantes y guarda los metadatos en PostgreSQL. El original queda intacto en SeaweedFS, junto a las versiones ligeras que usa la galería.
+
+**Cuando vuelvo a verlo**, la galería pide primero los metadatos por páginas. Para mostrar una miniatura o reproducir un vídeo, la API comprueba que tengo acceso al recuerdo y devuelve un enlace firmado que caduca. Caddy sirve el archivo a través de ese enlace, mientras el almacén sigue siendo privado.
